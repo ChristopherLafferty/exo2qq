@@ -1,0 +1,9 @@
+[project]
+name = "exo2qq"
+version = "0.1.0"
+description = "EXO CSV to QQ CSV Converter"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "streamlit>=1.45.0",
+]
