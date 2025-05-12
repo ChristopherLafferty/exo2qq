@@ -45,7 +45,8 @@ def read_exo(file):
     try:
         decoded_file = StringIO(file.getvalue().decode('utf-16'))       
         header_row = find_header(decoded_file, 'Date')
-        df = pd.read_csv('sample_data/EXO_file.csv', skiprows=header_row, encoding='utf-16')
+        decoded_file.seek(0)
+        df = pd.read_csv(decoded_file, skiprows=header_row, encoding='utf-16')
         return df
     except:
         st.write(":red[Error]: There was a problem reading EXO CSV file")
@@ -63,7 +64,7 @@ def display_qq_preview(df):
 
 def main():
     st.title("EXO CSV to QQ CSV Converter")
-    uploaded_file = st.file_uploader('Select your EXO CSV File:')
+    uploaded_file = st.file_uploader('Select your EXO CSV File:', type="csv")
     st.divider()
     
     if uploaded_file:        
