@@ -71,7 +71,7 @@ def main():
         exo_df = read_exo(uploaded_file)
 
         if exo_df is not None:
-            st.subheader("Previews:")
+            
             qq_df = exo_to_qq(exo_df)
 
             if qq_df is not None:                
@@ -81,8 +81,11 @@ def main():
                     data=csv_out,
                     file_name="qq.csv",
                     mime="text/csv",
-                    icon=':material/download:'
+                    icon=':material/download:',
+                    type='primary'
                 )
+                st.divider()
+                st.subheader("Previews:")
                 display_qq_preview(qq_df)            
 
     st.divider()
