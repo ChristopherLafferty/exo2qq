@@ -23,10 +23,12 @@ def exo_to_qq(df):
                         'Temp °C':'Temp(oC)',
                         'SpCond µS/cm': 'EC.T(uS/cm)'},
                 inplace=True)
-        df['DateTime'] = pd.to_datetime(df['Date (MM/DD/YYYY)'] + ' ' + df['Time (HH:mm:ss)'])
+        
+        # Combine Date and Time, and change format to: %Y-%m-%d %H:%M:%S
+        df['DateTime'] = (pd.to_datetime(df['Date (MM/DD/YYYY)'] + ' ' + df['Time (HH:mm:ss)'])).dt.strftime('%Y-%m-%d %H:%M:%S')
 
         # Create new df using just the fields needed for QQ
-        df_out = df[['DateTime', 'EC(uS/cm)', 'Temp(oC)','EC.T(uS/cm)']]
+        df_out = df[['DateTime', 'EC(uS/cm)', 'Temp(oC)','EC.T(uS/cm)']]        
 
         # Add Placeholder Columns for QQ
         cols = ['Mass(kg)', 'CF.T(mg/L)/(uS/cm)', 'BGEC.T(uS/cm)',
@@ -67,26 +69,29 @@ def main():
             if qq_df is not None:
                 with st.container(border=True):
                     col1, col2 = st.columns(2)
-                    start_date_base = qq_df['DateTime'][0]
+                    
+                    # Convert first DateTime to Pandas datetime for calculation
+                    start_date_base = pd.to_datetime(qq_df['DateTime'][0])
+
+                    # Info Panel
                     with col1:
                         f"First DateTime: :green[{start_date_base}] "
                         f"Records Read: :green[{qq_df.shape[0]:,d}]"
                     
+                    # Date/Time Adjust Form
                     with col2:
                         with st.form(key='info_form'):
                             t = st.time_input("Start Time", value=start_date_base.time(), key='start_time')
                             d = st.date_input("Start Date", value=start_date_base.date(), key='start_date')
                             submit = st.form_submit_button('Normalize DateTime', type='secondary')
 
+                # If Submit, offset Outgoing Dates
                 if submit:
-                    form_time = pd.to_datetime(
-                        f"{st.session_state['start_date'].isoformat()} {st.session_state['start_time'].isoformat()}")
-                    time_adjust = form_time - start_date_base
-                    
-                    # qq_df['DateTime'] = qq_df['DateTime'] + form_time
-                    qq_df.loc[:, 'DateTime'] += time_adjust           
+                    form_datetime = datetime.datetime.combine( st.session_state['start_date'], st.session_state['start_time'])
+                    time_adjust = form_datetime - start_date_base
+                    qq_df.loc[:, 'DateTime'] = (pd.to_datetime(qq_df.loc[:, 'DateTime']) + time_adjust).dt.strftime('%Y-%m-%d %H:%M:%S')
 
-
+                # Prepare CSV for Output
                 csv_out = '\r\n'.join(QQ_HEADERS) + qq_df.to_csv(index=False, lineterminator = '\r\n', encoding='utf-8')
                 st.download_button(
                     label="Download QQ CSV",
