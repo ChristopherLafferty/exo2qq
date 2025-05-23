@@ -6,6 +6,9 @@ dist/
 wheels/
 *.egg-info
 
+# VSC
+.vscode/
+
 # Virtual environments
 .venv
 sample_data/
