@@ -70,19 +70,22 @@ def main():
 
                 with col1:
                     write_csv_summary()
+                    st.write('**QQ CSV Detected**')
+                    st.caption("You may adjust the DateTime values "
+                                "by:"
+                                "\n1. Select a new ***Start Date***, ***Start Time***."
+                                "\n2. Press '***Adjust DateTime***' to apply the"
+                                "DateTime adjustment"
+                                "\n\nThe DateTime will be applied and ready when"
+                                "Selecting '***Download QQ CSV***'")
 
                 with col2:
                     start_datetime = st.session_state['start_datetime']
                     
                     with st.form(key='info_form'):
-                        st.write('**QQ CSV Detected**')
+                        
                         st.write(f'Start DateTime:  :green[{start_datetime}]')
-                        st.caption('You may adjust the DateTime values '
-                                   'by selecting a new **Start Date**, **Start Time**, and'
-                                   'pressing the \'Adjust DateTime\' button before using the'
-                                   '**Download QQ CSV** button.')
 
-                        st.write(f'Select a new Start Date and Time to shift ')
                         d = st.date_input("Start Date", value=start_datetime.date(), key='start_date')
                         t = st.time_input("Start Time", value=start_datetime.time(), key='start_time')
                         submit = st.form_submit_button('Adjust DateTime', type='secondary')
@@ -103,7 +106,7 @@ def main():
 
                 with col2:
 
-                    st.caption("EXO CSV File Detected. Data will automatically beconverted to QQ format and is ready for download.")
+                    st.caption("EXO CSV File Detected. Data  automatically being converted to QQ format and is ready for download.")
                     st.caption("Preview of converted Data below.")
 
         # Prepare Download
