@@ -34,8 +34,8 @@ class CSVImport:
             # if self._csv_type == CSVImport.CSV_TYPE.EXO:
             #     self.to_qq()
 
-
     def __repr__(self):
+        # To be able to verify basics when viewing object in session data
         csv_type = getattr(self, '_csv_type', 'Unknown CSV Type')
         encoding = getattr(self, '_encoding', 'Unknown Encoding')         
         df = getattr(self, 'dataframe', None)
@@ -95,13 +95,12 @@ class CSVImport:
                     st.write(f'Error: :red[Unable to read file]\n{e}\n{type(e)}')
         self._file = decoded
 
-
     def fix_qq_datetime(self):
         if self.csv_type == CSVImport.CSV_TYPE.QQ:
             pass
 
 
-    def to_qq(self):
+    def convert_to_qq(self):
         try:
             if self.csv_type == CSVImport.CSV_TYPE.EXO:
 
@@ -127,11 +126,13 @@ class CSVImport:
                 # Update object
                 self.dataframe = df_out
                 self.csv_type = CSVImport.CSV_TYPE.QQ
-                self.header = CSVImport.QQ_DEFAULT_HEADERS
+                self.header = '\r\n'.join(CSVImport.QQ_DEFAULT_HEADERS)
                 self.encoding = 'utf-8'
         except Exception as e:
             st.write("Error: A problem was encountered in conversion. EXO was not in expected format.", e)
 
+    def to_csv(self):
+        return self.header + self.dataframe.to_csv(index=False, lineterminator='\r\n', encoding='utf-8')
 
 
 
@@ -169,7 +170,7 @@ class CSVImport:
                     csv_found = True
                     break
                 case _:
-                    headers_lines.append(line.strip())
+                    headers_lines.append(line)
                     file_pos = f.tell()
             if i > 20:
                 # No file found by 20
@@ -179,9 +180,9 @@ class CSVImport:
         if csv_found:
             f.seek(file_pos)
             self.dataframe = pd.read_csv(f, encoding=self.encoding)
-
+            
             if headers_lines:
-                self._header = '\n'.join(headers_lines)
+                self._header = ''.join(headers_lines)
 
 
 
