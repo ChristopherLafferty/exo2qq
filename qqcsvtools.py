@@ -2,8 +2,8 @@ from io import StringIO
 import pandas as pd
 import datetime
 import codecs
-from enum import StrEnum
 import streamlit as st
+from typing import List
 
 import os
 def log(s):
@@ -19,15 +19,17 @@ QQ_DEFAULT_HEADERS = [
 class CSVImport:
 
     def __init__(self, upload_file=None):
-        _file: StringIO = None
-        encoding: str = None
-        header: str = None
-        csv_type: str = None
-        dataframe: pd.DataFrame = None
+        self.file: StringIO = None
+        self.encoding: str = None
+        self.header: str = None
+        self.csv_type: str = None
+        self.dataframe: pd.DataFrame = None
+        self.dataframes: List[pd.DataFrame] = []
 
-        self.file = upload_file
-        if self.file:
-            self._separate_data()
+        if upload_file:
+            self.file = self._import_file(upload_file)
+            if self.file:
+                self._separate_data()
 
     def __repr__(self):
         # To be able to verify basics when viewing object in session data
@@ -39,14 +41,9 @@ class CSVImport:
         else:
             x, y = df.shape
             df_info = f'{x} rows x {y} columns'
-        return f'{csv_type}, {encoding}, {df_info}'
-    
-    @property
-    def file(self) -> StringIO:
-        return self._file
-    
-    @file.setter
-    def file(self, upload_file):
+        return f'{csv_type}, {encoding}, {df_info}'    
+
+    def _import_file (self, upload_file): 
         """Populate importer with data from the file"""
         decoded = None
         bom = self._read_bom(upload_file)        
@@ -64,7 +61,7 @@ class CSVImport:
                     self.encoding = 'utf-16'
                 except Exception as e:
                     st.write(f'Error: :red[Unable to read file]\n{e}\n{type(e)}')
-        self._file = decoded
+        return decoded
 
 
     def convert_to_qq(self):
