@@ -5,16 +5,18 @@ import codecs
 from enum import StrEnum
 import streamlit as st
 
-class CSVImport:
-    QQ_DEFAULT_HEADERS = [
-        'QQSN,Ch0SN,Ch1SN,Ch2SN,Ch0Cal,Ch1Cal,Ch2Cal,FWVers,VolInj(ml),CalVol(l),[NaCl](g/l),StnName,StnID,PrjName,PrjID',
-        'QM0.00,TM0.000,TM0.000,TM0.000,0.0,0.0,0.0,QQF0.0.00,0.000,0.000,0.000,00000000 - NA,0,NONE,0',
-        '',
-        '']
+import os
+def log(s):
+    """Utility function to log to console instead of on HTML document"""
+    os.write(1, f"{s}\n".encode())
 
-    class FIRST_COL(StrEnum):
-        EXO = 'Date (MM/DD/YYYY)'
-        QQ = 'DateTime'
+QQ_DEFAULT_HEADERS = [
+    'QQSN,Ch0SN,Ch1SN,Ch2SN,Ch0Cal,Ch1Cal,Ch2Cal,FWVers,VolInj(ml),CalVol(l),[NaCl](g/l),StnName,StnID,PrjName,PrjID',
+    'QM0.00,TM0.000,TM0.000,TM0.000,0.0,0.0,0.0,QQF0.0.00,0.000,0.000,0.000,00000000 - NA,0,NONE,0',
+    '',
+    '']
+
+class CSVImport:
 
     class CSV_TYPE(StrEnum):
         QQ = "QQ"
@@ -77,6 +79,7 @@ class CSVImport:
     
     @file.setter
     def file(self, upload_file):
+        """Populate importer with data from the file"""
         decoded = None
         bom = self._read_bom(upload_file)        
         if bom:
@@ -95,12 +98,9 @@ class CSVImport:
                     st.write(f'Error: :red[Unable to read file]\n{e}\n{type(e)}')
         self._file = decoded
 
-    def fix_qq_datetime(self):
-        if self.csv_type == CSVImport.CSV_TYPE.QQ:
-            pass
-
 
     def convert_to_qq(self):
+        """Remap compatible EXO Data to QQ data"""
         try:
             if self.csv_type == CSVImport.CSV_TYPE.EXO:
 
@@ -126,18 +126,17 @@ class CSVImport:
                 # Update object
                 self.dataframe = df_out
                 self.csv_type = CSVImport.CSV_TYPE.QQ
-                self.header = '\r\n'.join(CSVImport.QQ_DEFAULT_HEADERS)
+                self.header = '\r\n'.join(QQ_DEFAULT_HEADERS)
                 self.encoding = 'utf-8'
         except Exception as e:
             st.write("Error: A problem was encountered in conversion. EXO was not in expected format.", e)
 
     def to_csv(self):
+        """Return dataframe as utf-8 encoded QQ CSV with File Header"""
         return self.header + self.dataframe.to_csv(index=False, lineterminator='\r\n', encoding='utf-8')
 
-
-
-    # Helper to try to get encoding type
     def _read_bom(self, file):
+        """Internal helper method to set encoding type of file"""
         byte_order_marker = file.read(4)
         decoder = None
         if byte_order_marker.startswith(codecs.BOM_UTF8):
@@ -152,6 +151,8 @@ class CSVImport:
         return decoder
 
     def _separate_data(self):
+        """Separate self.file's file headers from actual CSV Data"""
+        
         f = self.file
         headers_lines = []
         f.seek(0)
@@ -159,16 +160,26 @@ class CSVImport:
         csv_found = False
 
         for i, line in enumerate(f):
-            match line.split(sep=',')[0]:
-                case CSVImport.FIRST_COL.EXO:
+
+            match line.split(sep=','):
+                # EXO Data Headers
+                case ['Date (MM/DD/YYYY)', *headers_remaining]:
+                    # log(f'Headers remaining: {headers_remaining}')
                     self._csv_type = CSVImport.CSV_TYPE.EXO
                     csv_found = True
                     break
 
-                case CSVImport.FIRST_COL.QQ:
+                # QQ Data Headers
+                case ['DateTime', *_ ]:
                     self._csv_type = CSVImport.CSV_TYPE.QQ
                     csv_found = True
                     break
+
+                # Capture EXO Serial Numbers... Not Needed?
+                # case [_, _, _, 'SENSOR SERIAL NUMBER:', *serials]:
+                #     headers_lines.append(line)
+                #     file_pos = f.tell()
+
                 case _:
                     headers_lines.append(line)
                     file_pos = f.tell()
@@ -179,7 +190,50 @@ class CSVImport:
 
         if csv_found:
             f.seek(file_pos)
-            self.dataframe = pd.read_csv(f, encoding=self.encoding)
+            df = pd.read_csv(f, encoding=self.encoding)
+
+            # EXO Files can contain data for multiple devices in same file
+            if self.csv_type == CSVImport.CSV_TYPE.EXO:
+
+                # Start with all headers
+                data_headers = df.columns.tolist()
+
+                additional_device_count = 0
+                duplicate_headers = set()
+                base_headers = []
+
+                # separate standard device data cols from additional device cols
+                for col in data_headers:
+
+                    # Determine duplicate columns by pattern ColumnName.[digit] from pandas suffixing duplicate column names
+                    col_check = col.split('.')
+                    if col_check[-1].isdigit():
+                        duplicate_headers.add(col_check[0])
+                        additional_device_count = max(int(col_check[-1]), additional_device_count)
+                    # not a duplicate column
+                    else:
+                        base_headers.append(col)
+
+                dfs = []
+                dfs.append( df[base_headers] )
+
+                for i in range(1, additional_device_count+1):
+                    device_cols = [h if h not in duplicate_headers
+                                   else ''.join((h, '.', str(i)))
+                                   for h in base_headers ]
+                    additional_df = df[device_cols]
+                    additional_df.columns = device_cols
+                    dfs.append(additional_df)
+
+                for d in dfs:
+                    log(f'{d.shape=}')
+                    log(f'{d.head}')
+                    # log(f'{1}')
+
+
+
+            # Old Single Out DF, which will be refactored out eventually
+            self.dataframe = df
             
             if headers_lines:
                 self._header = ''.join(headers_lines)
