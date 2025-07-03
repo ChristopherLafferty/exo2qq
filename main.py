@@ -1,9 +1,6 @@
 import streamlit as st
 import pandas as pd
-from io import StringIO
 import datetime
-import codecs
-from enum import StrEnum
 from qqcsvtools import CSVImport
 
 TITLE = 'QQ CSV Tools'
@@ -47,8 +44,7 @@ def main():
         csv_import: CSVImport = st.session_state['csv_import']
 
         # Draw QQ summary and Date Adjustment Tools
-        if st.session_state.get('CSV Type', "") == CSVImport.CSV_TYPE.QQ:
-        # if csv_import.csv_type == CSVImport.CSV_TYPE.QQ:
+        if st.session_state.get('CSV Type', "") == "qq":
             # Initialize session-persistent start_datetime
             if 'start_datetime' not in st.session_state:
                 st.session_state['start_datetime'] = pd.to_datetime(csv_import.dataframe['DateTime'][0])
@@ -96,8 +92,7 @@ def main():
                 st.rerun()
 
         # Draw EXO summary 
-        elif st.session_state.get('CSV Type', "") == CSVImport.CSV_TYPE.EXO:
-        # elif csv_import.csv_type == CSVImport.CSV_TYPE.EXO:
+        elif st.session_state.get('CSV Type', "") == "exo":
             csv_import.convert_to_qq()
             with st.container(border=True):
                 col1, col2 = st.columns(2)
@@ -121,7 +116,7 @@ def main():
         )
 
         # Display Previews
-        if csv_import.csv_type == CSVImport.CSV_TYPE.QQ:
+        if csv_import.csv_type == "qq":
             st.subheader("Previews:")
             tab_data_preview, tab_chart_preview = st.tabs(["🗃 Data", "📈 Chart"])
        

@@ -18,28 +18,21 @@ QQ_DEFAULT_HEADERS = [
 
 class CSVImport:
 
-    class CSV_TYPE(StrEnum):
-        QQ = "QQ"
-        EXO = "EXO"
-        UNKNOWN = "Unknown"
-
     def __init__(self, upload_file=None):
         _file: StringIO = None
-        _encoding: str = None
-        _csv_type: CSVImport.CSV_TYPE = None
-        _header: str = None
+        encoding: str = None
+        header: str = None
+        csv_type: str = None
         dataframe: pd.DataFrame = None
 
         self.file = upload_file
         if self.file:
             self._separate_data()
-            # if self._csv_type == CSVImport.CSV_TYPE.EXO:
-            #     self.to_qq()
 
     def __repr__(self):
         # To be able to verify basics when viewing object in session data
-        csv_type = getattr(self, '_csv_type', 'Unknown CSV Type')
-        encoding = getattr(self, '_encoding', 'Unknown Encoding')         
+        csv_type = getattr(self, 'csv_type', 'Unknown CSV Type')
+        encoding = getattr(self, 'encoding', 'Unknown Encoding')         
         df = getattr(self, 'dataframe', None)
         if df is None:
             df_info = 'No Dataframe'
@@ -47,31 +40,6 @@ class CSVImport:
             x, y = df.shape
             df_info = f'{x} rows x {y} columns'
         return f'{csv_type}, {encoding}, {df_info}'
-
-    @property
-    def csv_type(self) -> CSV_TYPE:
-        return self._csv_type
-    
-    @csv_type.setter
-    def csv_type(self, csv_type: CSV_TYPE):
-        self._csv_type = csv_type
-
-    @property
-    def header(self) -> str:
-        if self._header:
-            return self._header
-
-    @header.setter
-    def header(self, header) -> str:
-        self._header = header
-
-    @property
-    def encoding(self) -> str:
-        return self._encoding
-    
-    @encoding.setter
-    def encoding(self, encoding:str):
-        self._encoding = encoding
     
     @property
     def file(self) -> StringIO:
@@ -84,16 +52,16 @@ class CSVImport:
         bom = self._read_bom(upload_file)        
         if bom:
             decoded = StringIO(upload_file.getvalue().decode(bom))
-            self._encoding = bom
+            self.encoding = bom
         else:            
             try:
                 # If no BOM try as UTF-8, assume UTF-16 if failed
                 decoded = StringIO(upload_file.getvalue().decode('utf-8'))
-                self._encoding = 'utf-8'
+                self.encoding = 'utf-8'
             except UnicodeDecodeError:
                 try:
                     decoded = StringIO(upload_file.getvalue().decode('utf-16'))
-                    self._encoding = 'utf-16'
+                    self.encoding = 'utf-16'
                 except Exception as e:
                     st.write(f'Error: :red[Unable to read file]\n{e}\n{type(e)}')
         self._file = decoded
@@ -102,7 +70,7 @@ class CSVImport:
     def convert_to_qq(self):
         """Remap compatible EXO Data to QQ data"""
         try:
-            if self.csv_type == CSVImport.CSV_TYPE.EXO:
+            if self.csv_type == "exo":
 
                 # Remap Exo to QQ Names            
                 self.dataframe.rename(columns={'Cond µS/cm':'EC(uS/cm)',
@@ -125,7 +93,7 @@ class CSVImport:
                 
                 # Update object
                 self.dataframe = df_out
-                self.csv_type = CSVImport.CSV_TYPE.QQ
+                self.csv_type = "qq"
                 self.header = '\r\n'.join(QQ_DEFAULT_HEADERS)
                 self.encoding = 'utf-8'
         except Exception as e:
@@ -165,13 +133,13 @@ class CSVImport:
                 # EXO Data Headers
                 case ['Date (MM/DD/YYYY)', *headers_remaining]:
                     # log(f'Headers remaining: {headers_remaining}')
-                    self._csv_type = CSVImport.CSV_TYPE.EXO
+                    self.csv_type = "exo"
                     csv_found = True
                     break
 
                 # QQ Data Headers
                 case ['DateTime', *_ ]:
-                    self._csv_type = CSVImport.CSV_TYPE.QQ
+                    self.csv_type = "qq"
                     csv_found = True
                     break
 
@@ -185,7 +153,7 @@ class CSVImport:
                     file_pos = f.tell()
             if i > 20:
                 # No file found by 20
-                self.csv_type = CSVImport.CSV_TYPE.UNKNOWN
+                self.csv_type = None
                 break
 
         if csv_found:
@@ -193,7 +161,7 @@ class CSVImport:
             df = pd.read_csv(f, encoding=self.encoding)
 
             # EXO Files can contain data for multiple devices in same file
-            if self.csv_type == CSVImport.CSV_TYPE.EXO:
+            if self.csv_type == "exo":
 
                 # Start with all headers
                 data_headers = df.columns.tolist()
@@ -236,7 +204,7 @@ class CSVImport:
             self.dataframe = df
             
             if headers_lines:
-                self._header = ''.join(headers_lines)
+                self.header = ''.join(headers_lines)
 
 
 
