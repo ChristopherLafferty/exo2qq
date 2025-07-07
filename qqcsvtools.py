@@ -1,6 +1,6 @@
 from io import StringIO
 import pandas as pd
-import datetime
+# import datetime
 import codecs
 import streamlit as st
 from typing import List
@@ -25,6 +25,9 @@ class CSVImport:
         self.csv_type: str = None
         self.dataframe: pd.DataFrame = None
         self.dataframes: List[pd.DataFrame] = []
+        self.dataframes_out: List[pd.DataFrame] = []
+        self.serials = None
+        self.converted = False
 
         if upload_file:
             self.file = self._import_file(upload_file)
@@ -34,14 +37,14 @@ class CSVImport:
     def __repr__(self):
         # To be able to verify basics when viewing object in session data
         csv_type = getattr(self, 'csv_type', 'Unknown CSV Type')
-        encoding = getattr(self, 'encoding', 'Unknown Encoding')         
+        # encoding = getattr(self, 'encoding', 'Unknown Encoding')         
         df = getattr(self, 'dataframe', None)
         if df is None:
             df_info = 'No Dataframe'
         else:
             x, y = df.shape
             df_info = f'{x} rows x {y} columns'
-        return f'{csv_type}, {encoding}, {df_info}'    
+        return f'{csv_type}, {df_info}'    
 
     def _import_file (self, upload_file): 
         """Populate importer with data from the file"""
@@ -63,42 +66,46 @@ class CSVImport:
                     st.write(f'Error: :red[Unable to read file]\n{e}\n{type(e)}')
         return decoded
 
-
     def convert_to_qq(self):
         """Remap compatible EXO Data to QQ data"""
         try:
             if self.csv_type == "exo":
 
-                # Remap Exo to QQ Names            
-                self.dataframe.rename(columns={'Cond µS/cm':'EC(uS/cm)',
-                                'Temp °C':'Temp(oC)',
-                                'SpCond µS/cm': 'EC.T(uS/cm)'},
-                        inplace=True)
-                
-                # Combine Date and Time, and change format to: %Y-%m-%d %H:%M:%S
-                self.dataframe['DateTime'] = (pd.to_datetime(self.dataframe['Date (MM/DD/YYYY)'] + ' ' + self.dataframe['Time (HH:mm:ss)'])).dt.strftime('%Y-%m-%d %H:%M:%S')
+                for i, df in enumerate(self.dataframes):
+                    update_df = df.copy()
 
-                # Create new df using just the fields needed for QQ
-                df_out = self.dataframe[['DateTime', 'EC(uS/cm)', 'Temp(oC)','EC.T(uS/cm)']]        
+                    # Remap Exo to QQ Names
+                    update_df.rename(columns={'Cond µS/cm':'EC(uS/cm)',
+                                              'Temp °C':'Temp(oC)',
+                                              'SpCond µS/cm': 'EC.T(uS/cm)'},
+                                              inplace=True)
+                    
+                    # Combine Date and Time, and change format to: %Y-%m-%d %H:%M:%S
+                    update_df['DateTime'] = (pd.to_datetime(df['Date (MM/DD/YYYY)'] + ' ' + df['Time (HH:mm:ss)'])
+                                      ).dt.strftime('%Y-%m-%d %H:%M:%S')
 
-                # Add Placeholder Columns for QQ
-                cols = ['Mass(kg)', 'CF.T(mg/L)/(uS/cm)', 'BGEC.T(uS/cm)',
-                        'Q(cms/cfs)', 'Grade', 'S_BGEC.T(uS/cm)', '2sUnc_Q(%)',
-                        'preBG_index', 'dt(s)', 'Area(s*uS/cm)', '3rd_U/S',
-                        'QUnit', 'QComp', 'VBatt(V)' ]
-                df_out.loc[:, cols] = ''
-                
+                    # Update df to keep just the fields needed for QQ                    
+                    update_df = update_df[['DateTime', 'EC(uS/cm)', 'Temp(oC)','EC.T(uS/cm)']]
+
+                    # Add Placeholder Columns for QQ
+                    qq_cols = ['Mass(kg)', 'CF.T(mg/L)/(uS/cm)', 'BGEC.T(uS/cm)',
+                            'Q(cms/cfs)', 'Grade', 'S_BGEC.T(uS/cm)', '2sUnc_Q(%)',
+                            'preBG_index', 'dt(s)', 'Area(s*uS/cm)', '3rd_U/S',
+                            'QUnit', 'QComp', 'VBatt(V)' ]
+                    
+                    update_df.loc[:, qq_cols] = ''
+                    self.dataframes[i] = update_df
+
                 # Update object
-                self.dataframe = df_out
-                self.csv_type = "qq"
-                self.header = '\r\n'.join(QQ_DEFAULT_HEADERS)
-                self.encoding = 'utf-8'
+                self.dataframe = self.dataframes[0] # for single DF old version
+                self.converted = True
         except Exception as e:
             st.write("Error: A problem was encountered in conversion. EXO was not in expected format.", e)
 
-    def to_csv(self):
+    def to_csv(self, df):
         """Return dataframe as utf-8 encoded QQ CSV with File Header"""
-        return self.header + self.dataframe.to_csv(index=False, lineterminator='\r\n', encoding='utf-8')
+        header = self.header if self.csv_type == 'qq' else '\r\n'.join(QQ_DEFAULT_HEADERS)
+        return header + df.to_csv(index=False, lineterminator='\r\n', encoding='utf-8')
 
     def _read_bom(self, file):
         """Internal helper method to set encoding type of file"""
@@ -129,7 +136,6 @@ class CSVImport:
             match line.split(sep=','):
                 # EXO Data Headers
                 case ['Date (MM/DD/YYYY)', *headers_remaining]:
-                    # log(f'Headers remaining: {headers_remaining}')
                     self.csv_type = "exo"
                     csv_found = True
                     break
@@ -140,10 +146,10 @@ class CSVImport:
                     csv_found = True
                     break
 
-                # Capture EXO Serial Numbers... Not Needed?
-                # case [_, _, _, 'SENSOR SERIAL NUMBER:', *serials]:
-                #     headers_lines.append(line)
-                #     file_pos = f.tell()
+                # Capture EXO Serial Numbers
+                case [_, _, _, 'SENSOR SERIAL NUMBER:', *serials]:
+                    headers_lines.append(line)
+                    file_pos = f.tell()
 
                 case _:
                     headers_lines.append(line)
@@ -159,50 +165,74 @@ class CSVImport:
 
             # EXO Files can contain data for multiple devices in same file
             if self.csv_type == "exo":
+                # Perform extra processing for EXO files in helper function
+                self.dataframes = self._handle_exo_dataframe(df)
 
-                # Start with all headers
-                data_headers = df.columns.tolist()
+                # Slice based on number of dataframes, which will yield the serial numbers of the first repeated column
+                self.serials = serials[0:len(self.dataframes)]
 
-                additional_device_count = 0
-                duplicate_headers = set()
-                base_headers = []
+                # Old Single Out DF for all EXO files, which will be refactored when front-end suppports
+                self.dataframe = self.dataframes[0] # TO be refactored out late
 
-                # separate standard device data cols from additional device cols
-                for col in data_headers:
-
-                    # Determine duplicate columns by pattern ColumnName.[digit] from pandas suffixing duplicate column names
-                    col_check = col.split('.')
-                    if col_check[-1].isdigit():
-                        duplicate_headers.add(col_check[0])
-                        additional_device_count = max(int(col_check[-1]), additional_device_count)
-                    # not a duplicate column
-                    else:
-                        base_headers.append(col)
-
-                dfs = []
-                dfs.append( df[base_headers] )
-
-                for i in range(1, additional_device_count+1):
-                    device_cols = [h if h not in duplicate_headers
-                                   else ''.join((h, '.', str(i)))
-                                   for h in base_headers ]
-                    additional_df = df[device_cols]
-                    additional_df.columns = device_cols
-                    dfs.append(additional_df)
-
-                for d in dfs:
-                    log(f'{d.shape=}')
-                    log(f'{d.head}')
-                    # log(f'{1}')
-
-
-
-            # Old Single Out DF, which will be refactored out eventually
-            self.dataframe = df
+            # QQ Handling. Saves to both dataframe and dataframes until front-end is uppdated
+            else:
+                self.dataframe = df
+                self.dataframes = [df]
             
             if headers_lines:
                 self.header = ''.join(headers_lines)
 
+    def _handle_exo_dataframe(self, df: pd.DataFrame) -> List[pd.DataFrame]:
+        """
+        Separates EXO dataframe handling to handle the possibility of calibration files
+        which include additionial sensors.
+        
+        If a calibration file with multiple device data is read as input, the data will be split
+        into a list of multiple dataframes.
 
+        If there is a single device, then a list of a single dataframe will be created.
+        """
+        dfs = []
+
+        # Start with all headers
+        data_headers = df.columns.tolist()
+
+        additional_device_count = 0
+        
+        duplicate_headers = []
+        base_headers = []
+
+        # separate standard device data cols from additional device cols
+        for col in data_headers:
+
+            # Determine duplicate columns by pattern ColumnName.[digit] from pandas suffixing duplicate column names
+            col_check = col.split('.')
+            if col_check[-1].isdigit():
+                col_base, col_index = col_check[0], int(col_check[-1])
+                if col_base not in duplicate_headers:
+                    duplicate_headers.append(col_base)
+                # The number of additional devices will be equal to the largest column digit suffix
+                additional_device_count = max(col_index, additional_device_count)
+            else:
+                base_headers.append(col)
+
+        # All EXO Files should have this. Will be the first in list, and only if no other devices.
+        dfs.append( df[base_headers] )
+
+        # If there are additional devices detected, add those as well starting with suffix '.1'
+        for i in range(1, additional_device_count+1):
+            additional_df = df[base_headers]
+
+            # Create a new dataframe with the *.n columns
+            device_headers = [f'{h}.{i}' for h in duplicate_headers]
+            additional_data = df[device_headers]
+
+            # Rename duplicate columns to their base name
+            additional_data.columns = duplicate_headers
+
+            # Update the copy of the base device data with the same fields of additional device            
+            additional_df.update(additional_data)
+            dfs.append(additional_df)
+        return dfs
 
 

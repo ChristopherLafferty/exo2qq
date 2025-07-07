@@ -30,18 +30,28 @@ def write_csv_summary():
         write_lines.append(f' * {k}:  :green[{st.session_state[k]}]')
     st.write('\n'.join(write_lines))
 
+def display_preview(df):
+    preview_lines_count = min(10, df.shape[0])
+    st.write(f'Displaying {preview_lines_count} of {df.shape[0]:,d} rows')
+    st.dataframe(df[0:preview_lines_count]) # Up to 10 rows in preview
+    st.line_chart(df, x='DateTime', y=['EC(uS/cm)', 'Temp(oC)', 'EC.T(uS/cm)'],
+                color=['#FF0000', '#00FF00', '#0000FF'])    
+
 
 def main():
+    # st.set_page_config(layout="wide")
     st.title(TITLE)
     st.write("")
     
-    uploaded_file = st.file_uploader(label='Select a QQ or EXO CSV File:',
-                                     on_change=file_changed,
-                                     key='upload_file',
-                                     type="csv")
+    st.file_uploader(label='Select a QQ or EXO CSV File:',
+                    on_change=file_changed,
+                    key='upload_file',
+                    type="csv")
 
     if 'csv_import' in st.session_state:
         csv_import: CSVImport = st.session_state['csv_import']
+
+        st.write(f'{st.session_state.get('CSV Type', "")}, {csv_import.csv_type}')
 
         # Draw QQ summary and Date Adjustment Tools
         if st.session_state.get('CSV Type', "") == "qq":
@@ -72,7 +82,7 @@ def main():
                                 "\n1. Select a new ***Start Date***, ***Start Time***."
                                 "\n2. Press '***Adjust DateTime***' to apply the"
                                 "DateTime adjustment"
-                                "\n\nThe DateTime will be applied and ready when"
+                                "\n\nThe DateTime will be applied and ready when "
                                 "Selecting '***Download QQ CSV***'")
 
                 with col2:
@@ -93,44 +103,56 @@ def main():
 
         # Draw EXO summary 
         elif st.session_state.get('CSV Type', "") == "exo":
-            csv_import.convert_to_qq()
+            
+            if not csv_import.converted:
+                csv_import.convert_to_qq()
+
             with st.container(border=True):
                 col1, col2 = st.columns(2)
                 with col1:
                     write_csv_summary()
 
                 with col2:
-
-                    st.caption("EXO CSV File Detected. Data  automatically being converted to QQ format and is ready for download.")
+                    st.caption("EXO CSV File Detected. Data  automatically being converted to QQ format and prepared for download.")
                     st.caption("Preview of converted Data below.")
 
-        # Prepare Download
-        csv_out = csv_import.to_csv()
-        st.download_button(
-            label="Download QQ CSV",
-            data=csv_out,
-            file_name="qq.csv",
-            mime="text/csv",
-            icon=':material/download:',
-            type='primary'
-        )
+        # Prepare Download(s)
+        download_cols = st.columns(len(csv_import.dataframes))
+        for i, export_df in enumerate(csv_import.dataframes):
+            export_df = csv_import.dataframes[i]
+            csv_out = csv_import.to_csv(export_df)
+
+            if csv_import.csv_type == 'qq':
+                label_text = 'Download QQ CSV'
+                f_name = 'qq.csv'
+            else:
+                label_text = f'Download {csv_import.serials[i]} CSV'
+                f_name = f'{csv_import.serials[i]}_to_qq.csv'
+
+            with download_cols[i]:
+                st.download_button(
+                    label=label_text,
+                    data=csv_out,
+                    file_name=f_name,
+                    mime="text/csv",
+                    icon=':material/download:',
+                    type='primary'
+                )
 
         # Display Previews
-        if csv_import.csv_type == "qq":
+        if csv_import.dataframe is not None:
             st.subheader("Previews:")
-            tab_data_preview, tab_chart_preview = st.tabs(["🗃 Data", "📈 Chart"])
-       
-            preview_df = csv_import.dataframe
-            with tab_data_preview:
-                preview_lines_count = min(10, preview_df.shape[0])
-                st.write(f'Previewing {preview_lines_count} of {preview_df.shape[0]:,d} rows')
-                st.dataframe(preview_df[0:preview_lines_count]) # Up to 10 rows in preview
 
-            with tab_chart_preview:
-                st.line_chart(preview_df,
-                              x='DateTime',
-                              y=['EC(uS/cm)', 'Temp(oC)', 'EC.T(uS/cm)'],
-                              color=['#FF0000', '#00FF00', '#0000FF'])
+            # If Multiple Device Display
+            if len(csv_import.dataframes) > 1:
+                tabs = st.tabs([f'🗃 {s}:'for s in csv_import.serials])
+
+                for i, tab in enumerate(tabs):
+                    df = csv_import.dataframes[i]
+                    with tab:
+                        display_preview(df)
+            else:
+                display_preview(csv_import.dataframes[0])
 
     st.divider()
     st.markdown(
